@@ -1,0 +1,11 @@
+server:
+  port: 8087
+  address: 127.0.0.1
+spring:
+  application:
+    name: pdfbox-lab
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
+server.error.include-message: never

@@ -1,0 +1,516 @@
+<header class="topbar">
+  <a class="brand" href="/" aria-label="PDFBox Lab — strona główna"
+    ><span class="brand-icon">P<span>◧</span></span
+    ><span>PDFBox <strong>Lab</strong></span></a
+  >
+  <div class="top-meta">
+    <span class="tag">APACHE PDFBOX 3</span
+    ><span class="local-badge">Przetwarzanie lokalne</span>
+  </div>
+</header>
+<main>
+  <section class="hero">
+    <div>
+      <p class="eyebrow">DOCUMENT INTELLIGENCE PLAYGROUND</p>
+      <h1>Od PDF do <span>kontekstu.</span></h1>
+      <p class="lead">
+        Zobacz, co naprawdę odczytuje PDFBox.<br />Przygotuj dane, na których
+        model może oprzeć odpowiedź.
+      </p>
+    </div>
+    <div class="flow" aria-label="Przepływ danych">
+      <span>PDF</span><i></i><span>Tekst</span><i></i><span>Fragmenty</span
+      ><i></i><span class="flow-last">Kontekst LLM</span>
+    </div>
+  </section>
+  @if (error) {
+    <div class="alert error" role="alert">{{ error }}</div>
+  }
+  <div class="workspace">
+    <aside>
+      <section class="panel upload-panel">
+        <div class="section-heading">
+          <h2>Dokument źródłowy</h2>
+          <span class="small-label">PDF</span>
+        </div>
+        <div
+          class="dropzone"
+          [class.dragging]="dragOver"
+          (dragover)="$event.preventDefault(); dragOver = true"
+          (dragleave)="dragOver = false"
+          (drop)="drop($event)"
+        >
+          <span class="file-icon" aria-hidden="true">▤</span>
+          <strong>{{ file ? file.name : "Twój PDF, nowa perspektywa" }}</strong>
+          <p>Przeciągnij plik tutaj lub wybierz z dysku</p>
+          <label class="button primary" [class.disabled]="busy" for="pdf-file"
+            >Wybierz PDF</label
+          >
+          <input
+            class="visually-hidden"
+            id="pdf-file"
+            type="file"
+            accept="application/pdf,.pdf"
+            [disabled]="busy"
+            (change)="selectFile($event)"
+          />
+          <small>Do 20 MB · maks. 150 stron</small>
+        </div>
+        <button class="demo-button" (click)="demo()" [disabled]="busy">
+          <span>◈</span> Wypróbuj przykładowy dokument
+        </button>
+        <p class="privacy">
+          Bez klucza API. Dokument nie jest wysyłany do zewnętrznego modelu.
+        </p>
+      </section>
+      <section class="panel settings">
+        <div class="section-heading">
+          <h2>Przygotowanie danych</h2>
+          <span class="small-label">USTAWIENIA</span>
+        </div>
+        <label for="chunk-size"
+          >Rozmiar fragmentu <span>{{ chunkSize }} znaków</span></label
+        >
+        <input
+          id="chunk-size"
+          type="range"
+          min="200"
+          max="4000"
+          step="100"
+          [(ngModel)]="chunkSize"
+          [disabled]="busy"
+        />
+        <div class="range-labels"><span>200</span><span>4 000</span></div>
+        <label for="overlap"
+          >Nakładanie fragmentów <span>{{ overlap }} znaków</span></label
+        >
+        <input
+          id="overlap"
+          type="number"
+          min="0"
+          [max]="chunkSize / 2 - 1"
+          [(ngModel)]="overlap"
+          [disabled]="busy"
+        />
+        <p class="hint">
+          Wspólna treść pomaga zachować kontekst na granicy fragmentów.
+        </p>
+        <label class="check-label"
+          ><input
+            type="checkbox"
+            [(ngModel)]="sortByPosition"
+            [disabled]="busy"
+          />
+          Sortuj tekst według położenia</label
+        >
+        <details>
+          <summary>PDF zabezpieczony hasłem</summary>
+          <label for="password">Hasło do dokumentu</label
+          ><input
+            id="password"
+            type="password"
+            [(ngModel)]="password"
+            autocomplete="off"
+            [disabled]="busy"
+          />
+        </details>
+        <button
+          class="button dark full"
+          (click)="analyze()"
+          [disabled]="!file || busy"
+        >
+          {{ busy ? "Analizuję dokument…" : "Przetwórz dokument" }}
+        </button>
+        @if (settingsChanged) {
+          <p class="hint pending">
+            Zastosuj zmienione ustawienia przyciskiem powyżej.
+          </p>
+        }
+      </section>
+      <div class="aside-note">
+        <strong>PDFBox wydobywa. Model rozumuje.</strong>
+        <p>
+          W tym laboratorium przygotowujesz kontekst RAG. Nie trenujesz modelu
+          na przesłanym PDF.
+        </p>
+      </div>
+    </aside>
+    <section class="results" [attr.aria-busy]="busy">
+      @if (busy) {
+        <div class="panel empty-state">
+          <span class="spinner"></span>
+          <h2>Odczytuję Twój dokument</h2>
+          <p>Tekst, metadane i fragmenty za chwilę pojawią się tutaj.</p>
+        </div>
+      } @else if (analysis; as doc) {
+        <div class="document-bar">
+          <div>
+            <span class="small-label">AKTYWNY DOKUMENT</span>
+            <h2>{{ doc.filename }}</h2>
+            <p>
+              PDF {{ doc.pdfVersion }} ·
+              {{ doc.sizeBytes / 1024 | number: "1.0-0" }} KB ·
+              {{ doc.processingMs }} ms
+            </p>
+          </div>
+          <button class="button secondary" (click)="exportJson()">
+            Eksport JSON
+          </button>
+        </div>
+        <div class="stats">
+          <div>
+            <strong>{{ doc.pages.length }}</strong
+            ><span>Strony</span>
+          </div>
+          <div>
+            <strong>{{ totalChars | number }}</strong
+            ><span>Znaki tekstu</span>
+          </div>
+          <div>
+            <strong>{{ doc.chunks.length }}</strong
+            ><span>Fragmenty</span>
+          </div>
+          <div [class.warning-stat]="ocrPages > 0">
+            <strong>{{ ocrPages }}</strong
+            ><span>Bez warstwy tekstu</span>
+          </div>
+        </div>
+        <div class="tabbar" role="tablist" aria-label="Wyniki analizy">
+          <button
+            role="tab"
+            [attr.aria-selected]="tab === 'text'"
+            [class.active]="tab === 'text'"
+            (click)="tab = 'text'"
+          >
+            Tekst i podgląd
+          </button>
+          <button
+            role="tab"
+            [attr.aria-selected]="tab === 'chunks'"
+            [class.active]="tab === 'chunks'"
+            (click)="tab = 'chunks'"
+          >
+            Fragmenty <span>{{ doc.chunks.length }}</span>
+          </button>
+          <button
+            role="tab"
+            [attr.aria-selected]="tab === 'metadata'"
+            [class.active]="tab === 'metadata'"
+            (click)="tab = 'metadata'"
+          >
+            Metadane
+          </button>
+          <button
+            role="tab"
+            [attr.aria-selected]="tab === 'context'"
+            [class.active]="tab === 'context'"
+            (click)="tab = 'context'"
+          >
+            Kontekst dla modelu
+          </button>
+        </div>
+        <div class="panel result-panel" role="tabpanel">
+          @if (tab === "text") {
+            <div class="toolbar">
+              <label
+                >Strona
+                <select [ngModel]="page" (ngModelChange)="selectPage(+$event)">
+                  @for (p of doc.pages; track p.number) {
+                    <option [value]="p.number">
+                      {{ p.number }} / {{ doc.pages.length }}
+                    </option>
+                  }
+                </select></label
+              ><button class="text-button" (click)="downloadPdf()">
+                Pobierz PDF
+              </button>
+            </div>
+            <div class="comparison">
+              <div class="page-preview">
+                <div class="pane-label">
+                  OBRAZ STRONY <span>PDFRenderer</span>
+                </div>
+                <div class="paper-area">
+                  @if (previewBusy) {
+                    <span
+                      class="spinner"
+                      aria-label="Renderowanie strony"
+                    ></span>
+                  } @else if (previewError) {
+                    <p role="alert">{{ previewError }}</p>
+                    <button class="button secondary" (click)="renderPage()">
+                      Ponów podgląd
+                    </button>
+                  } @else if (previewUrl) {
+                    <img [src]="previewUrl" [alt]="'Podgląd strony ' + page" />
+                  }
+                </div>
+              </div>
+              <div class="text-preview">
+                <div class="pane-label">
+                  WYDOBYTY TEKST
+                  <label class="raw-toggle"
+                    ><input type="checkbox" [(ngModel)]="raw" /> Surowy</label
+                  >
+                </div>
+                @if (currentPage; as p) {
+                  <pre>{{
+                    (raw ? p.rawText : p.text) ||
+                      "Brak warstwy tekstowej. Jeśli to skan, przekaż obraz strony do narzędzia OCR."
+                  }}</pre>
+                  <div class="page-details">
+                    {{ p.width | number: "1.0-0" }} ×
+                    {{ p.height | number: "1.0-0" }} pt · Obrót:
+                    {{ p.rotation }}° · Zasoby obrazów: {{ p.imageResources }}
+                  </div>
+                }
+              </div>
+            </div>
+            <p class="hint inset">
+              Normalizacja łączy wyrazy przeniesione przez „-”, porządkuje
+              odstępy i zachowuje akapity. Porównaj z tekstem surowym.
+            </p>
+          }
+          @if (tab === "chunks") {
+            <div class="content-heading">
+              <h3>Małe fragmenty, konkretne źródła</h3>
+              <p>
+                Rozmiar {{ doc.chunkSize }} znaków · nakładanie
+                {{ doc.overlap }} · granice stron zachowane
+              </p>
+            </div>
+            <div class="chunk-list">
+              @for (chunk of doc.chunks; track chunk.id) {
+                <article class="chunk-card">
+                  <div>
+                    <span class="pill">Strona {{ chunk.page }}</span
+                    ><span class="hint"
+                      >{{ chunk.text.length }} znaków · ~{{
+                        chunk.estimatedTokens
+                      }}
+                      tokenów</span
+                    >
+                  </div>
+                  <p>{{ chunk.text }}</p>
+                  <code
+                    >{{ chunk.id }} · pozycje {{ chunk.start }}–{{
+                      chunk.end
+                    }}</code
+                  >
+                </article>
+              } @empty {
+                <p class="inset">
+                  Brak fragmentów — dokument wymaga warstwy tekstowej lub OCR.
+                </p>
+              }
+            </div>
+          }
+          @if (tab === "metadata") {
+            <div class="content-heading">
+              <h3>Więcej niż tekst</h3>
+              <p>
+                Informacje o dokumencie i wartości formularzy odczytane przez
+                PDFBox.
+              </p>
+            </div>
+            <dl class="metadata">
+              <dt>SHA-256 dokumentu</dt>
+              <dd class="hash">{{ doc.documentId }}</dd>
+              <dt>Szyfrowanie</dt>
+              <dd>
+                {{ doc.encrypted ? "Tak · otwarto z podanym hasłem" : "Nie" }}
+              </dd>
+              @for (entry of doc.metadata | keyvalue; track entry.key) {
+                <dt>{{ entry.key }}</dt>
+                <dd>{{ entry.value }}</dd>
+              }
+            </dl>
+            <div class="content-heading">
+              <h3>
+                Pola formularza AcroForm
+                <span class="pill">{{ doc.fields.length }}</span>
+              </h3>
+            </div>
+            @if (doc.fields.length) {
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nazwa</th>
+                      <th>Typ</th>
+                      <th>Wartość</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (field of doc.fields; track $index) {
+                      <tr>
+                        <td>{{ field.name }}</td>
+                        <td>{{ field.type }}</td>
+                        <td>{{ field.value }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <p class="inset hint">
+                Ten PDF nie zawiera pól formularza AcroForm.
+              </p>
+            }
+          }
+          @if (tab === "context") {
+            <div class="content-heading">
+              <span class="small-label accent">ETAP RAG · RETRIEVAL</span>
+              <h3>Co przekazać modelowi?</h3>
+              <p>
+                Zadaj pytanie. Wyszukamy pasujące fragmenty i zbudujemy prompt z
+                cytowaniami.
+              </p>
+            </div>
+            <form class="question-form" (ngSubmit)="retrieve()">
+              <label for="question">Pytanie do dokumentu</label
+              ><textarea
+                id="question"
+                name="question"
+                [(ngModel)]="question"
+                maxlength="2000"
+                rows="3"
+                required
+              ></textarea>
+              <div class="question-actions">
+                <label
+                  >Liczba źródeł
+                  <select name="topK" [(ngModel)]="topK">
+                    <option [ngValue]="1">1</option>
+                    <option [ngValue]="3">3</option>
+                    <option [ngValue]="5">5</option>
+                    <option [ngValue]="10">10</option>
+                  </select></label
+                ><button
+                  class="button primary"
+                  type="submit"
+                  [disabled]="
+                    searching || !doc.chunks.length || !question.trim()
+                  "
+                >
+                  {{ searching ? "Wyszukuję…" : "Zbuduj kontekst" }}
+                </button>
+              </div>
+            </form>
+            <p class="hint inset">
+              Lokalny BM25: dopasowanie słów, bez embeddingów i bez wywołania
+              modelu.
+            </p>
+            @if (context; as ctx) {
+              <div class="context-results">
+                <div class="section-heading">
+                  <h3>Wybrane źródła</h3>
+                  <span class="pill">Źródła: {{ ctx.matches.length }}</span>
+                </div>
+                @for (match of ctx.matches; track match.chunk.id) {
+                  <article class="match-card">
+                    <div>
+                      <button
+                        class="text-button"
+                        (click)="tab = 'text'; selectPage(match.chunk.page)"
+                      >
+                        Strona {{ match.chunk.page }}</button
+                      ><span class="hint">BM25 {{ match.score }}</span>
+                    </div>
+                    <p>{{ match.chunk.text }}</p>
+                  </article>
+                } @empty {
+                  <div class="alert">
+                    Brak pasujących słów. Spróbuj użyć frazy występującej w
+                    dokumencie. Nie znaleziono źródeł do odpowiedzi.
+                  </div>
+                }
+                <div class="section-heading prompt-heading">
+                  <h3>
+                    Gotowy prompt
+                    <span class="hint">~{{ ctx.estimatedTokens }} tokenów</span>
+                  </h3>
+                  <div>
+                    <button class="text-button" (click)="copyPrompt()">
+                      Kopiuj</button
+                    ><button class="text-button" (click)="exportPrompt()">
+                      Pobierz prompt
+                    </button>
+                  </div>
+                </div>
+                <pre class="prompt">{{ ctx.prompt }}</pre>
+                <p class="hint">{{ ctx.note }}</p>
+                <p class="hint" role="status">{{ notice }}</p>
+              </div>
+            }
+          }
+        </div>
+        <details class="warnings">
+          <summary>
+            Uwagi do jakości danych <span>{{ doc.warnings.length }}</span>
+          </summary>
+          <ul>
+            @for (warning of doc.warnings; track $index) {
+              <li>{{ warning }}</li>
+            }
+          </ul>
+        </details>
+      } @else {
+        <div class="panel empty-state">
+          <div class="empty-illustration">
+            <span class="doc-sheet"
+              >PDF<span></span><span></span><span></span></span
+            ><span class="code-sheet"
+              >&#123; text &#125;<br /><span>page: 1</span><br /><span
+                >source: pdf</span
+              ></span
+            >
+          </div>
+          <p class="eyebrow">ZAJRZYJ POD POWIERZCHNIĘ PDF</p>
+          <h2>Dokument to dopiero początek.</h2>
+          <p>
+            Wczytaj swój PDF lub uruchom przykład.<br />Prześledź drogę od
+            strony dokumentu do danych dla modelu.
+          </p>
+          <button class="button secondary" (click)="demo()" [disabled]="busy">
+            Otwórz przykład Atlas
+          </button>
+          <div class="feature-row">
+            <span>Tekst i obraz strony</span><span>Fragmenty ze źródłami</span
+            ><span>Prompt do LLM</span>
+          </div>
+        </div>
+        <div class="learning-grid">
+          <article>
+            <span class="feature-icon">▤</span>
+            <h3>Odczytaj</h3>
+            <p>
+              Tekst, metadane i pola formularzy. Zobacz różnicę między PDF a
+              skanem.
+            </p>
+          </article>
+          <article>
+            <span class="feature-icon">▦</span>
+            <h3>Przygotuj</h3>
+            <p>
+              Podziel tekst na fragmenty. Zachowaj stronę i źródło każdej
+              informacji.
+            </p>
+          </article>
+          <article>
+            <span class="feature-icon">⌘</span>
+            <h3>Zbuduj kontekst</h3>
+            <p>
+              Wybierz treści pasujące do pytania i wyeksportuj dane do swojego
+              pipeline’u.
+            </p>
+          </article>
+        </div>
+      }
+    </section>
+  </div>
+  <footer>
+    PDFBox Lab <span>Java + Spring Boot / Angular</span
+    ><span>Ekstrakcja danych ≠ trenowanie modelu</span>
+  </footer>
+</main>
