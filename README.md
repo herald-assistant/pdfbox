@@ -2,6 +2,8 @@
 
 Lokalny projekt demonstracyjny **Java 21 + Spring Boot 3.5.7 + Apache PDFBox 3.0.8** oraz **Angular 21**. Interfejs jest po polsku. Pokazuje pełną drogę od PDF do kontekstu dla modelu: ekstrakcję, normalizację, fragmenty ze źródłami, wyszukiwanie BM25 i gotowy prompt. Nie wymaga konta ani klucza API.
 
+![PDFBox Lab — podgląd strony PDF obok wydobytego tekstu, statystyki dokumentu i ustawienia podziału na fragmenty](docs/pdfbox-lab.jpg)
+
 ## Uruchomienie
 
 Wymagania: JDK 21, Maven 3.6.3+ oraz Node.js 20.19+, 22.12+ lub 24.x (zgodne z wymaganiami Angulara 21). Pierwsze uruchomienie pobiera zależności z Maven Central i npm.
